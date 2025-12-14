@@ -38,8 +38,12 @@
     <script src="script.js"></script>
     <script>
         // Инициализация страницы рейтинга
-        document.addEventListener('DOMContentLoaded', function() {
-            displayRating();
+        document.addEventListener('DOMContentLoaded', async function() {
+            await displayRating();
+            // Периодически обновляем рейтинг
+            setInterval(async () => {
+                await displayRating();
+            }, 10000); // Обновляем каждые 10 секунд
         });
     </script>
 </body>
