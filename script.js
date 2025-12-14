@@ -54,17 +54,45 @@ async function initializeVoting() {
     updateTotalVotes();
     setupSwipeListeners();
     setupButtonListeners();
+    updateSyncStatus();
     
-    // Периодически обновляем глобальные данные
-    setInterval(async () => {
-        await loadGlobalVotes();
-        updateTotalVotes();
-        // Обновляем счётчики на карточках
-        if (currentPair.length === 2) {
-            updateCard(1, currentPair[0]);
-            updateCard(2, currentPair[1]);
-        }
-    }, 10000); // Обновляем каждые 10 секунд
+    // Периодически обновляем глобальные данные (если настроен API)
+    if (GLOBAL_STORAGE_CONFIG.binId) {
+        setInterval(async () => {
+            await loadGlobalVotes();
+            updateTotalVotes();
+            updateSyncStatus();
+            // Обновляем счётчики на карточках
+            if (currentPair.length === 2) {
+                updateCard(1, currentPair[0]);
+                updateCard(2, currentPair[1]);
+            }
+        }, 5000); // Обновляем каждые 5 секунд для более быстрой синхронизации
+    }
+}
+
+// Обновление статуса синхронизации
+function updateSyncStatus() {
+    const syncStatus = document.getElementById('syncStatus');
+    if (!syncStatus) return;
+    
+    if (GLOBAL_STORAGE_CONFIG.binId && GLOBAL_STORAGE_CONFIG.apiKey) {
+        syncStatus.textContent = '🌐 Глобальный рейтинг';
+        syncStatus.style.display = 'inline';
+        syncStatus.style.color = '#4CAF50';
+        syncStatus.style.fontSize = '0.85rem';
+        syncStatus.style.fontWeight = '600';
+    } else if (GLOBAL_STORAGE_CONFIG.binId && !GLOBAL_STORAGE_CONFIG.apiKey) {
+        syncStatus.textContent = '⚠️ Только чтение (настройте API ключ)';
+        syncStatus.style.display = 'inline';
+        syncStatus.style.color = '#FF9800';
+        syncStatus.style.fontSize = '0.85rem';
+    } else {
+        syncStatus.textContent = '💾 Локальный режим';
+        syncStatus.style.display = 'inline';
+        syncStatus.style.color = '#666';
+        syncStatus.style.fontSize = '0.85rem';
+    }
 }
 
 // Загрузка новой пары участников
@@ -343,15 +371,20 @@ async function registerVote(personId) {
 }
 
 // Конфигурация для глобального хранилища
-// Используем JSONBin.io для синхронизации данных между устройствами
-// ВАЖНО: Для работы глобального счётчика нужно настроить API (см. SETUP.md)
-// Если API не настроен, используется только localStorage (локально на каждом устройстве)
+// Используем JSONBin.io для синхронизации данных между всеми устройствами
+// 
+// 🌐 ВАЖНО: Для глобального рейтинга нужно настроить один раз:
+// 1. Зайдите на https://jsonbin.io/ и создайте аккаунт (бесплатно)
+// 2. Создайте новый bin с пустым объектом: {}
+// 3. Скопируйте bin ID из URL (например: если URL = https://jsonbin.io/abc123/def456, то binId = 'abc123/def456')
+// 4. Получите Master Key в Settings → API Keys
+// 5. Вставьте их ниже
+//
+// После настройки рейтинг и счётчик будут ОДИНАКОВЫМИ для всех пользователей!
 const GLOBAL_STORAGE_CONFIG = {
-    binId: '', // Замените на ваш bin ID из jsonbin.io (например: 'abc123/def456')
+    binId: 'b/693e82c3ae596e708f990b3a', // Вставьте ваш bin ID (например: 'abc123/def456')
     apiUrl: 'https://api.jsonbin.io/v3/b',
-    // Для записи нужен API ключ (можно получить бесплатно на jsonbin.io)
-    // Оставьте пустым, если не хотите настраивать - будет работать только локально
-    apiKey: '' // Вставьте ваш Master Key из jsonbin.io
+    apiKey: '$2a$10$I8HYQtcgzHWnjXsl9gVHX.m0hhNorVdanfTQMYFMusbRDwJARA8vK' // Вставьте ваш Master Key из jsonbin.io
 };
 
 // Работа с localStorage (локальный кэш)
@@ -377,24 +410,42 @@ async function loadGlobalVotes() {
     
     try {
         // Пытаемся загрузить из глобального хранилища
-        const headers = {};
+        // Для публичных bins можно читать без API ключа
+        const headers = {
+            'X-Bin-Meta': 'false'
+        };
+        
+        // Если есть API ключ, используем его (для приватных bins)
         if (GLOBAL_STORAGE_CONFIG.apiKey) {
             headers['X-Master-Key'] = GLOBAL_STORAGE_CONFIG.apiKey;
         }
         
         const response = await fetch(`${GLOBAL_STORAGE_CONFIG.apiUrl}/${GLOBAL_STORAGE_CONFIG.binId}/latest`, {
-            headers: headers
+            headers: headers,
+            cache: 'no-cache' // Всегда получаем свежие данные
         });
         
         if (response.ok) {
             const result = await response.json();
             globalVotesData = result.record || {};
+            
+            // Объединяем с локальными данными (на случай, если были локальные голоса)
+            const localData = getLocalVotesData();
+            for (const [id, votes] of Object.entries(localData)) {
+                if (!globalVotesData[id] || globalVotesData[id] < votes) {
+                    globalVotesData[id] = votes;
+                }
+            }
+            
             // Синхронизируем с локальным хранилищем
             saveLocalVotesData(globalVotesData);
             return globalVotesData;
+        } else {
+            console.log('Не удалось загрузить глобальные данные, используем локальные');
+            globalVotesData = getLocalVotesData();
         }
     } catch (error) {
-        console.log('Не удалось загрузить глобальные данные, используем локальные:', error);
+        console.log('Ошибка загрузки глобальных данных, используем локальные:', error);
         // Используем локальные данные как fallback
         globalVotesData = getLocalVotesData();
     }
@@ -415,7 +466,7 @@ async function saveGlobalVotes(data) {
     // Пытаемся сохранить в глобальное хранилище (только если настроено)
     if (GLOBAL_STORAGE_CONFIG.binId && GLOBAL_STORAGE_CONFIG.apiKey) {
         try {
-            await fetch(`${GLOBAL_STORAGE_CONFIG.apiUrl}/${GLOBAL_STORAGE_CONFIG.binId}`, {
+            const response = await fetch(`${GLOBAL_STORAGE_CONFIG.apiUrl}/${GLOBAL_STORAGE_CONFIG.binId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -423,10 +474,19 @@ async function saveGlobalVotes(data) {
                 },
                 body: JSON.stringify(data)
             });
+            
+            if (response.ok) {
+                console.log('✅ Голоса успешно синхронизированы с сервером');
+            } else {
+                console.log('⚠️ Не удалось сохранить в глобальное хранилище');
+            }
         } catch (error) {
-            console.log('Не удалось сохранить в глобальное хранилище:', error);
+            console.log('⚠️ Ошибка синхронизации с сервером:', error);
             // Данные уже сохранены локально, продолжаем работу
         }
+    } else if (GLOBAL_STORAGE_CONFIG.binId && !GLOBAL_STORAGE_CONFIG.apiKey) {
+        console.log('⚠️ API ключ не настроен. Голоса сохраняются только локально.');
+        console.log('💡 Для глобальной синхронизации настройте API ключ (см. SETUP.md)');
     }
 }
 
