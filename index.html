@@ -1,14 +1,62 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FaceOff - Кто круче?</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="logo">🔥 FaceOff</h1>
+            <nav class="nav">
+                <a href="index.html" class="nav-link active">Голосовать</a>
+                <a href="rating.html" class="nav-link">Рейтинг</a>
+            </nav>
+        </header>
+
+        <main class="main-content">
+            <div class="stats-bar">
+                <span class="stat">Всего голосов: <strong id="totalVotes">0</strong></span>
+                <span class="hint">👈 Свайпни или 👉 нажми кнопку</span>
+            </div>
+
+            <div class="voting-area" id="votingArea">
+                <div class="card-wrapper">
+                    <div class="card" id="card1" data-person-id="">
+                        <div class="card-image-wrapper">
+                            <img src="" alt="" class="card-image" id="image1">
+                            <div class="card-overlay">
+                                <span class="person-name" id="name1"></span>
+                                <span class="person-votes" id="votes1"></span>
+                            </div>
+                        </div>
+                        <button class="vote-btn vote-btn-left" data-side="left">Голос за левое фото</button>
+                    </div>
+
+                    <div class="vs-divider">VS</div>
+
+                    <div class="card" id="card2" data-person-id="">
+                        <div class="card-image-wrapper">
+                            <img src="" alt="" class="card-image" id="image2">
+                            <div class="card-overlay">
+                                <span class="person-name" id="name2"></span>
+                                <span class="person-votes" id="votes2"></span>
+                            </div>
+                        </div>
+                        <button class="vote-btn vote-btn-right" data-side="right">Голос за правое фото</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="swipe-hint">
+                <p>💡 Свайпни карточку влево или вправо для голосования</p>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
 </html>
 
