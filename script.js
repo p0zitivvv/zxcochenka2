@@ -47,11 +47,24 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Инициализация страницы голосования
-function initializeVoting() {
+async function initializeVoting() {
+    // Загружаем глобальные данные
+    await loadGlobalVotes();
     loadNewPair();
     updateTotalVotes();
     setupSwipeListeners();
     setupButtonListeners();
+    
+    // Периодически обновляем глобальные данные
+    setInterval(async () => {
+        await loadGlobalVotes();
+        updateTotalVotes();
+        // Обновляем счётчики на карточках
+        if (currentPair.length === 2) {
+            updateCard(1, currentPair[0]);
+            updateCard(2, currentPair[1]);
+        }
+    }, 10000); // Обновляем каждые 10 секунд
 }
 
 // Загрузка новой пары участников
@@ -306,12 +319,12 @@ function setupButtonListeners() {
 }
 
 // Регистрация голоса
-function registerVote(personId) {
+async function registerVote(personId) {
     // Сохраняем текущую пару как последнюю проголосованную
     saveLastVotedPair(currentPair);
     
-    // Добавляем голос
-    addVote(personId);
+    // Добавляем голос (асинхронно)
+    await addVote(personId);
     
     // Обновляем статистику
     updateTotalVotes();
@@ -329,20 +342,112 @@ function registerVote(personId) {
     }, 500);
 }
 
-// Работа с localStorage
-function getVotesData() {
+// Конфигурация для глобального хранилища
+// Используем JSONBin.io для синхронизации данных между устройствами
+// ВАЖНО: Для работы глобального счётчика нужно настроить API (см. SETUP.md)
+// Если API не настроен, используется только localStorage (локально на каждом устройстве)
+const GLOBAL_STORAGE_CONFIG = {
+    binId: '', // Замените на ваш bin ID из jsonbin.io (например: 'abc123/def456')
+    apiUrl: 'https://api.jsonbin.io/v3/b',
+    // Для записи нужен API ключ (можно получить бесплатно на jsonbin.io)
+    // Оставьте пустым, если не хотите настраивать - будет работать только локально
+    apiKey: '' // Вставьте ваш Master Key из jsonbin.io
+};
+
+// Работа с localStorage (локальный кэш)
+function getLocalVotesData() {
     const data = localStorage.getItem('faceoff_votes');
     return data ? JSON.parse(data) : {};
 }
 
-function saveVotesData(data) {
+function saveLocalVotesData(data) {
     localStorage.setItem('faceoff_votes', JSON.stringify(data));
 }
 
-function addVote(personId) {
+// Работа с глобальным хранилищем
+let globalVotesData = {};
+
+// Загрузка глобальных данных
+async function loadGlobalVotes() {
+    // Если API не настроен, используем только локальные данные
+    if (!GLOBAL_STORAGE_CONFIG.binId) {
+        globalVotesData = getLocalVotesData();
+        return globalVotesData;
+    }
+    
+    try {
+        // Пытаемся загрузить из глобального хранилища
+        const headers = {};
+        if (GLOBAL_STORAGE_CONFIG.apiKey) {
+            headers['X-Master-Key'] = GLOBAL_STORAGE_CONFIG.apiKey;
+        }
+        
+        const response = await fetch(`${GLOBAL_STORAGE_CONFIG.apiUrl}/${GLOBAL_STORAGE_CONFIG.binId}/latest`, {
+            headers: headers
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            globalVotesData = result.record || {};
+            // Синхронизируем с локальным хранилищем
+            saveLocalVotesData(globalVotesData);
+            return globalVotesData;
+        }
+    } catch (error) {
+        console.log('Не удалось загрузить глобальные данные, используем локальные:', error);
+        // Используем локальные данные как fallback
+        globalVotesData = getLocalVotesData();
+    }
+    
+    // Если не удалось загрузить, используем локальные данные
+    if (Object.keys(globalVotesData).length === 0) {
+        globalVotesData = getLocalVotesData();
+    }
+    
+    return globalVotesData;
+}
+
+// Сохранение глобальных данных
+async function saveGlobalVotes(data) {
+    globalVotesData = data;
+    saveLocalVotesData(data);
+    
+    // Пытаемся сохранить в глобальное хранилище (только если настроено)
+    if (GLOBAL_STORAGE_CONFIG.binId && GLOBAL_STORAGE_CONFIG.apiKey) {
+        try {
+            await fetch(`${GLOBAL_STORAGE_CONFIG.apiUrl}/${GLOBAL_STORAGE_CONFIG.binId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Master-Key': GLOBAL_STORAGE_CONFIG.apiKey
+                },
+                body: JSON.stringify(data)
+            });
+        } catch (error) {
+            console.log('Не удалось сохранить в глобальное хранилище:', error);
+            // Данные уже сохранены локально, продолжаем работу
+        }
+    }
+}
+
+// Получить данные о голосах (сначала из глобального хранилища)
+function getVotesData() {
+    // Используем глобальные данные, если они загружены
+    if (Object.keys(globalVotesData).length > 0) {
+        return globalVotesData;
+    }
+    // Иначе используем локальные
+    return getLocalVotesData();
+}
+
+function saveVotesData(data) {
+    saveGlobalVotes(data);
+}
+
+async function addVote(personId) {
     const data = getVotesData();
     data[personId] = (data[personId] || 0) + 1;
-    saveVotesData(data);
+    await saveVotesData(data);
     return data[personId];
 }
 
@@ -373,10 +478,12 @@ function updateTotalVotes() {
 }
 
 // Отображение рейтинга
-function displayRating() {
+async function displayRating() {
     const ratingList = document.getElementById('ratingList');
     if (!ratingList) return;
     
+    // Загружаем глобальные данные перед отображением
+    await loadGlobalVotes();
     const votesData = getVotesData();
     const peopleMap = new Map(people.map(p => [p.id, p]));
     
