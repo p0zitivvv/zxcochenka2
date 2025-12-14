@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Рейтинг - FaceOff</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="logo">🔥 FaceOff</h1>
+            <nav class="nav">
+                <a href="index.html" class="nav-link">Голосовать</a>
+                <a href="rating.html" class="nav-link active">Рейтинг</a>
+            </nav>
+        </header>
+
+        <main class="main-content">
+            <div class="rating-header">
+                <h2 class="page-title">🏆 Топ участников</h2>
+                <div class="stats-bar">
+                    <span class="stat">Всего голосов: <strong id="totalVotesRating">0</strong></span>
+                    <span class="stat">Участников: <strong id="totalParticipants">0</strong></span>
+                </div>
+            </div>
+
+            <div class="rating-list" id="ratingList">
+                <div class="loading">Загрузка рейтинга...</div>
+            </div>
+
+            <div class="back-button-wrapper">
+                <a href="index.html" class="back-button">⬅ Назад к голосованию</a>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        // Инициализация страницы рейтинга
+        document.addEventListener('DOMContentLoaded', function() {
+            displayRating();
+        });
+    </script>
+</body>
+</html>
+
